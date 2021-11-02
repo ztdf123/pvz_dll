@@ -27,7 +27,14 @@ public:
     void nop() {
         mem::Nop((BYTE*)dst, len);
     }
+    void backup() {
+        memcpy_s(stolenBytes, len, (void*)dst, len);
+    }
+    void setPatchBytes(const char* hcode) {
+        memcpy_s(patchBytes, len, hcode, len);
+    }
 };
+
 
 class hookent {
 public:
@@ -42,35 +49,35 @@ public:
     bool Hook(void* ourFunct) {
         void* toHook = (void*)hookAddress;
         int len = hookLenth;
-        //the hook size must over 5
-        if (len < 5) {
-            return false;
-        }
-        //1.find where to hook and nop the original operates
+    //the hook size must over 5
+    if (len < 5) {
+        return false;
+    }
+    //1.find where to hook and nop the original operates
         DWORD curProtection = 0;
+    
+    VirtualProtect(toHook, len, PAGE_EXECUTE_READWRITE, &curProtection);
 
-        VirtualProtect(toHook, len, PAGE_EXECUTE_READWRITE, &curProtection);
-
-        memset(toHook, 0x90, len);
+    memset(toHook, 0x90, len);
 
         //2.cauculate the relative adrress from hookAddress to ourFunctinon address
         // then write our jmp code
         // {jmp ourfunc}(asm,which occupy 5 bytes in binary)
 
-        DWORD relativeAddress = (DWORD)ourFunct - ((DWORD)toHook + 5);
+    DWORD relativeAddress = (DWORD)ourFunct - ((DWORD)toHook + 5);
 
 
         *(BYTE*)toHook = 0xE9; //asm:jmp
-        *(DWORD*)((DWORD)toHook + 1) = relativeAddress;
+    *(DWORD*)((DWORD)toHook + 1) = relativeAddress;
 
-        //3.restore the old protection
-        VirtualProtect(toHook, len, curProtection, &curProtection);
+    //3.restore the old protection
+    VirtualProtect(toHook, len, curProtection, &curProtection);
 
-        return true;
+    return true; 
     }
 };
 hookent incSolarHook, bigSolarHook;
-patchent invinPlantes, secKill, noCd, autoPick, ignoreArmor;
+patchent invinPlantes, secKill, noCd, autoPick, ignoreArmor, backRun;
 
 void __declspec(naked) incSolar() {
     __asm {
@@ -78,6 +85,7 @@ void __declspec(naked) incSolar() {
         mov[edi + 0x5560], esi
         jmp incSolarHook.jmpBackAddress
     }
+
 }
 
 void __declspec(naked) bigSolar() {
@@ -89,19 +97,16 @@ void __declspec(naked) bigSolar() {
 }
 
 
-/* incSolarHook incSolar
-PlantsVsZombies.exe+1BA74 - 2B F3                 - sub esi,ebx
-PlantsVsZombies.exe+1BA76 - 89 B7 60550000        - mov [edi+00005560],esi
-*/
 
-/* bigSolarHook bigSolar
- PlantsVsZombies.exe+30A11 - 01 88 60550000        - add [eax+00005560],ecx
-*/
 void helpInfo()
 {
+    AllocConsole();
+    FILE* tmp;
+    freopen_s(&tmp, "CONOUT$", "w", stdout);
     std::cout << "Welcom to my cheat\nCreated by Antares\n";
     std::cout << "press 0 to inc 1000 solar\npress 1 to incsolar when plants\npress 2 to enbale bigsolar\n";
     std::cout << "press 3 to invinPlants\npress 4 to secKill\npress 5 to noCd\n";
+    std::cout << "press home to backRun\n";
 }
 void init()
 {
@@ -109,6 +114,7 @@ void init()
     incSolarHook.hookAddress = moduleBase + 0x1BA74;
     incSolarHook.jmpBackAddress = incSolarHook.hookAddress + incSolarHook.hookLenth;
     memcpy_s(incSolarHook.stolenBytes, incSolarHook.hookLenth, (void*)incSolarHook.hookAddress, incSolarHook.hookLenth);
+    
 
     bigSolarHook.hookLenth = 6;
     bigSolarHook.hookAddress = moduleBase + 0x30A11;
@@ -117,33 +123,31 @@ void init()
 
     invinPlantes.len = 4;
     invinPlantes.dst = moduleBase + 0x12FCF0;
-    memcpy_s(invinPlantes.stolenBytes, invinPlantes.len, (void*)invinPlantes.dst, invinPlantes.len);
-    memcpy_s(invinPlantes.patchBytes, invinPlantes.len, "\x83\x46\x40\x04", invinPlantes.len);
-
+    invinPlantes.backup();
+    invinPlantes.setPatchBytes("\x83\x46\x40\x04");
 
     ignoreArmor.len = 2;
     ignoreArmor.dst = moduleBase + 0x13186D;
-    memcpy_s(ignoreArmor.stolenBytes, ignoreArmor.len, (void*)ignoreArmor.dst, ignoreArmor.len);
+    ignoreArmor.backup();
     secKill.len = 2;
     secKill.dst = moduleBase + 0x13178A;
-    memcpy_s(secKill.stolenBytes, secKill.len, (void*)secKill.dst, secKill.len);
-    memcpy_s(secKill.patchBytes, secKill.len, "\x7C\x1D", secKill.len);
+    secKill.backup();
+    secKill.setPatchBytes("\x7C\x1D");
 
     noCd.len = 2;
     noCd.dst = moduleBase + 0x87296;
-    memcpy_s(noCd.stolenBytes, noCd.len, (void*)noCd.dst, noCd.len);
-    memcpy_s(noCd.patchBytes, noCd.len, "\x7D\x14", noCd.len);
+    noCd.backup();
+    noCd.setPatchBytes("\x7D\x14");
 
-
+    backRun.len = 1;
+    backRun.dst = moduleBase + 0x502C0;
+    backRun.backup();
+    backRun.setPatchBytes("\xC3");
 }
 
-/*
-    13186D cancel armor test
-    131783 BODY
-    87296 no cd
-    313F8 picked solar call
-    3158B autopick solar
-*/
+
+typedef int(__stdcall* _givedamage)(int damage);
+typedef void(__stdcall* _picksolar)();
 
 DWORD WINAPI MainThread(HMODULE hModule)
 {
@@ -152,9 +156,15 @@ DWORD WINAPI MainThread(HMODULE hModule)
     freopen_s(&tmp, "CONOUT$", "w", stdout);
     helpInfo();
     init();
+    _givedamage givedamage = _givedamage(moduleBase + 0x1317c0);//131872 real damage
+    _picksolar picksolar = _picksolar(moduleBase + 0x30E40); //
+    // 1312FE damage target 
+    // 12D718 
+    // 131319 DO DAMAGE
     
-
-    while (true) {
+    while (!GetAsyncKeyState(VK_END)) 
+    {
+        
         if (GetAsyncKeyState(VK_NUMPAD0) & 1) {
             DWORD solarAddress = mem::FindDMAddress(moduleBase + 0x2A74E8, { 0x68,0x768,0x5560 });
             *(int*)solarAddress += 1000;
@@ -218,11 +228,23 @@ DWORD WINAPI MainThread(HMODULE hModule)
                 std::cout << "noCd disabled!\n";
             }
         }
-
-        if (GetAsyncKeyState(VK_END) & 1){   
-            break;
+        if (GetAsyncKeyState(VK_NUMPAD6) & 1) {
+            picksolar();
+            std::cout << "try to pick\n";
         }
-        Sleep(5);
+        if (GetAsyncKeyState(VK_HOME) & 1) {
+            backRun.bPatch = !backRun.bPatch;
+            if (backRun.bPatch) {
+                backRun.patch();
+                std::cout << "backRun enabled!\n";
+            }
+            else {
+                backRun.restore();
+                std::cout << "backRun disabled!\n";
+            }
+
+        }
+        Sleep(10);
     }
     fclose(tmp);
     FreeConsole();
@@ -238,9 +260,32 @@ BOOL WINAPI DllMain(HINSTANCE hModule, DWORD dwReason, LPVOID lpReserved) {
         {
             CloseHandle(hackThread);
         }
-        break; 
+        break;
     }
     return TRUE;
 }
 
 
+/* incSolarHook incSolar
+PlantsVsZombies.exe+1BA74 - 2B F3                 - sub esi,ebx
+PlantsVsZombies.exe+1BA76 - 89 B7 60550000        - mov [edi+00005560],esi
+*/
+
+/* bigSolarHook bigSolar
+ PlantsVsZombies.exe+30A11 - 01 88 60550000        - add [eax+00005560],ecx
+*/
+/* incSolarHook incSolar
+PlantsVsZombies.exe+1BA74 - 2B F3                 - sub esi,ebx
+PlantsVsZombies.exe+1BA76 - 89 B7 60550000        - mov [edi+00005560],esi
+*/
+
+/* bigSolarHook bigSolar
+ PlantsVsZombies.exe+30A11 - 01 88 60550000        - add [eax+00005560],ecx
+*/
+/*
+    13186D cancel armor test
+    131783 BODY
+    87296 no cd
+    313F8 picked solar call
+    3158B autopick solar
+*/
