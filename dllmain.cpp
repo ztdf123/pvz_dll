@@ -29,6 +29,14 @@ public:
     }
 };
 
+/* incSolarHook incSolar
+PlantsVsZombies.exe+1BA74 - 2B F3                 - sub esi,ebx
+PlantsVsZombies.exe+1BA76 - 89 B7 60550000        - mov [edi+00005560],esi
+*/
+
+/* bigSolarHook bigSolar
+ PlantsVsZombies.exe+30A11 - 01 88 60550000        - add [eax+00005560],ecx
+*/
 class hookent {
 public:
     int hookLenth;
@@ -42,32 +50,32 @@ public:
     bool Hook(void* ourFunct) {
         void* toHook = (void*)hookAddress;
         int len = hookLenth;
-        //the hook size must over 5
-        if (len < 5) {
-            return false;
-        }
-        //1.find where to hook and nop the original operates
+    //the hook size must over 5
+    if (len < 5) {
+        return false;
+    }
+    //1.find where to hook and nop the original operates
         DWORD curProtection = 0;
+    
+    VirtualProtect(toHook, len, PAGE_EXECUTE_READWRITE, &curProtection);
 
-        VirtualProtect(toHook, len, PAGE_EXECUTE_READWRITE, &curProtection);
-
-        memset(toHook, 0x90, len);
+    memset(toHook, 0x90, len);
 
         //2.cauculate the relative adrress from hookAddress to ourFunctinon address
         // then write our jmp code
         // {jmp ourfunc}(asm,which occupy 5 bytes in binary)
 
-        DWORD relativeAddress = (DWORD)ourFunct - ((DWORD)toHook + 5);
+    DWORD relativeAddress = (DWORD)ourFunct - ((DWORD)toHook + 5);
 
 
         *(BYTE*)toHook = 0xE9; //asm:jmp
-        *(DWORD*)((DWORD)toHook + 1) = relativeAddress;
+    *(DWORD*)((DWORD)toHook + 1) = relativeAddress;
 
-        //3.restore the old protection
+    //3.restore the old protection
         VirtualProtect(toHook, len, curProtection, &curProtection);
 
-        return true;
-    }
+    return true; 
+}
 };
 hookent incSolarHook, bigSolarHook;
 patchent invinPlantes, secKill, noCd, autoPick, ignoreArmor;
@@ -78,6 +86,7 @@ void __declspec(naked) incSolar() {
         mov[edi + 0x5560], esi
         jmp incSolarHook.jmpBackAddress
     }
+
 }
 
 void __declspec(naked) bigSolar() {
@@ -99,6 +108,9 @@ PlantsVsZombies.exe+1BA76 - 89 B7 60550000        - mov [edi+00005560],esi
 */
 void helpInfo()
 {
+    AllocConsole();
+    FILE* tmp;
+    freopen_s(&tmp, "CONOUT$", "w", stdout);
     std::cout << "Welcom to my cheat\nCreated by Antares\n";
     std::cout << "press 0 to inc 1000 solar\npress 1 to incsolar when plants\npress 2 to enbale bigsolar\n";
     std::cout << "press 3 to invinPlants\npress 4 to secKill\npress 5 to noCd\n";
@@ -109,6 +121,7 @@ void init()
     incSolarHook.hookAddress = moduleBase + 0x1BA74;
     incSolarHook.jmpBackAddress = incSolarHook.hookAddress + incSolarHook.hookLenth;
     memcpy_s(incSolarHook.stolenBytes, incSolarHook.hookLenth, (void*)incSolarHook.hookAddress, incSolarHook.hookLenth);
+    
 
     bigSolarHook.hookLenth = 6;
     bigSolarHook.hookAddress = moduleBase + 0x30A11;
@@ -238,7 +251,7 @@ BOOL WINAPI DllMain(HINSTANCE hModule, DWORD dwReason, LPVOID lpReserved) {
         {
             CloseHandle(hackThread);
         }
-        break; 
+        break;
     }
     return TRUE;
 }
